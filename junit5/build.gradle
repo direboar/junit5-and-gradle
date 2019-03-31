@@ -1,0 +1,112 @@
+
+//see https://docs.gradle.org/current/userguide/java_testing.html#using_junit5
+plugins {
+    id 'java'
+	id 'checkstyle'
+	id 'pmd'
+	id 'findbugs'
+	id 'jacoco'
+	//id 'project-report' //dependencyのレポートしか出ない。
+    //id "gradle.site" version "0.6" //プラグインがうまく取れないので放置。
+}
+
+sourceCompatibility = '1.8'
+targetCompatibility = '1.8'
+
+//srcのエンコーディングを指定。
+//see http://nobeans.hatenablog.com/entry/20091104/1257344503
+tasks.withType(AbstractCompile)*.options*.encoding = tasks.withType(GroovyCompile)*.groovyOptions*.encoding = 'UTF-8'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    //junit5
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.4.1'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params:5.4.1'//Parameterized Testを使う場合。
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.4.1'
+	
+	//assertJ
+	testCompile("org.assertj:assertj-core:3.11.1")
+
+}
+
+//checkstyleの設定。
+checkstyle {
+    configFile = file("${rootProject.projectDir}/config/checkstyle.xml")
+    toolVersion = '8.10.1'
+	sourceSets = [project.sourceSets.main]
+	ignoreFailures = true
+}
+
+//pmdの設定
+pmd {
+    toolVersion = '5.8.1'
+	sourceSets = [project.sourceSets.main] 
+	ignoreFailures = true
+	consoleOutput = true
+}
+
+//findbugsの設定
+findbugs {
+    toolVersion = '3.0.1'
+	sourceSets = [project.sourceSets.main] 
+	ignoreFailures = true
+	effort = "max"
+}
+
+//FindBugsタスクのフォーマットをhtmlに変更している。 DSLのAPI仕様上は、ReadOnlyってなってるが。
+//https://docs.gradle.org/current/dsl/org.gradle.api.plugins.quality.FindBugs.html#org.gradle.api.plugins.quality.FindBugs:reports
+tasks.withType(FindBugs) { //tasks.withType(タスク型）で、タスクコンテナから指定されたタスクを取得する。
+    reports {
+        xml.enabled = false
+        html.enabled = true
+    }
+}
+
+//jacocoの設定
+jacoco{
+    toolVersion = '0.8.0'
+}
+
+//jacocoのレポート出力設定
+jacocoTestReport {
+    reports {
+        xml.enabled false
+        csv.enabled false
+        html.destination file("${buildDir}/jacocoHtml")
+    }
+}
+
+test {
+    //junit5.
+    //@see https://docs.gradle.org/current/javadoc/org/gradle/api/tasks/testing/Test.html#useJUnitPlatform--
+    //Specifies that JUnit Platform (a.k.a. JUnit 5) should be used to execute the tests.
+	//junit5に、jupiterを使うのか、Vintageを使うのかを指定する。デフォルトはクラスパスにある方が使用される。
+	
+	useJUnitPlatform()
+
+    //test実行時のjacoco設定。（jacocoがテスト実行時に生成するダンプ情報の出力先指定。jacocoレポート出力はtestタスクとは別に実行する必要あり。）
+    jacoco {
+        destinationFile = file("$buildDir/jacoco/jacocoTest.exec")
+        classDumpDir = file("$buildDir/jacoco/classpathdumps")
+    }
+}
+
+//テスト対象を絞り込むTestタスクを別途定義する例。
+task callJUnit(type : Test){ //Testタスクを継承。
+//  tagを指定して、実行対象を絞り込むことができる。
+    useJUnitPlatform{
+        includeTags 'fast', 'smoke & feature-a'
+	}
+	//testブロックとは別なので、jacoco生成は継承されない
+}
+
+//参考までに上記の式は、以下と同じ
+//https://docs.gradle.org/current/dsl/org.gradle.api.tasks.TaskContainer.html#org.gradle.api.tasks.TaskContainer:create(java.lang.String)
+tasks.create("callJUnit2",Test){
+    useJUnitPlatform{
+        includeTags 'fast', 'smoke & feature-a'
+	}
+}
